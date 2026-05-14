@@ -7,6 +7,7 @@ from bs4 import BeautifulSoup
 import time
 import helper
 
+
 class eGela:
     _login = 0
     _cookie = ""
@@ -23,48 +24,33 @@ class eGela:
         progress_var.set(progress)
         progress_bar.update()
 
-        print("##### 1. PETICION #####")
-        metodo = 'GET'
-        uri = "https://egela.ehu.eus/login/index.php"
-        #############################################
-        # RELLENAR CON CODIGO DE LA PETICION HTTP
-        # Y PROCESAMIENTO DE LA RESPUESTA HTTP
-        #############################################
+        saioa = requests.Session()
+        sarrera_uri = "https://egela.ehu.eus/login/index.php"
+        hasierako_erantzuna = saioa.get(sarrera_uri)
+        sare_azterketa = BeautifulSoup(hasierako_erantzuna.text, 'html.parser')
+        login_tokena = sare_azterketa.find('input', {'name': 'logintoken'})['value']
 
         progress = 25
         progress_var.set(progress)
         progress_bar.update()
         time.sleep(1)
 
-
-        print("\n##### 2. PETICION #####")
-        #############################################
-        # RELLENAR CON CODIGO DE LA PETICION HTTP
-        # Y PROCESAMIENTO DE LA RESPUESTA HTTP
-        #############################################
+        datuak = {'username': username, 'password': password, 'logintoken': login_tokena}
+        post_erantzuna = saioa.post(sarrera_uri, data=datuak, allow_redirects=False)
 
         progress = 50
         progress_var.set(progress)
         progress_bar.update()
         time.sleep(1)
 
-        print("\n##### 3. PETICION #####")
-        #############################################
-        # RELLENAR CON CODIGO DE LA PETICION HTTP
-        # Y PROCESAMIENTO DE LA RESPUESTA HTTP
-        #############################################
+        birbideratze_erantzuna = saioa.get(post_erantzuna.headers['Location'], allow_redirects=False)
 
         progress = 75
         progress_var.set(progress)
         progress_bar.update()
         time.sleep(1)
-        popup.destroy()
 
-        print("\n##### 4. PETICION #####")
-        #############################################
-        # RELLENAR CON CODIGO DE LA PETICION HTTP
-        # Y PROCESAMIENTO DE LA RESPUESTA HTTP
-        #############################################
+        azken_erantzuna = saioa.get(birbideratze_erantzuna.headers['Location'])
 
         progress = 100
         progress_var.set(progress)
@@ -72,11 +58,9 @@ class eGela:
         time.sleep(1)
         popup.destroy()
 
-
-        if COMPROBACION_DE_LOG_IN:
-            #############################################
-            # ACTUALIZAR VARIABLES
-            #############################################
+        if "Log out" in azken_erantzuna.text or "Irten" in azken_erantzuna.text:
+            self._login = 1
+            self._cookie = saioa.cookies
             self._root.destroy()
         else:
             messagebox.showinfo("Alert Message", "Login incorrect!")
@@ -87,41 +71,45 @@ class eGela:
         progress_var.set(progress)
         progress_bar.update()
 
-        print("\n##### 4. PETICION (Página principal de la asignatura en eGela) #####")
-        #############################################
-        # RELLENAR CON CODIGO DE LA PETICION HTTP
-        # Y PROCESAMIENTO DE LA RESPUESTA HTTP
-        #############################################
+        nire_orria = requests.get("https://egela.ehu.eus/my/", cookies=self._cookie)
+        nire_azterketa = BeautifulSoup(nire_orria.content, "html.parser")
 
-        progress_step = float(100.0 / len(NUMERO_DE_PDF_EN_EGELA))
+        for esteka in nire_azterketa.find_all('a'):
+            if esteka.text and "Sistemas Web" in esteka.text:
+                self._curso = esteka['href']
+                break
 
+        ikastaro_orria = requests.get(self._curso, cookies=self._cookie)
+        ikastaro_azterketa = BeautifulSoup(ikastaro_orria.content, "html.parser")
+        baliabideak = ikastaro_azterketa.find_all('a', href=lambda h: h and "resource/view.php" in h)
 
-        print("\n##### Analisis del HTML... #####")
-        #############################################
-        # ANALISIS DE LA PAGINA DEL AULA EN EGELA
-        # PARA BUSCAR PDFs
-        #############################################
+        if len(baliabideak) > 0:
+            urratsa = float(100.0 / len(baliabideak))
+        else:
+            urratsa = 100
 
-        # INICIALIZA Y ACTUALIZAR BARRA DE PROGRESO
-        # POR CADA PDF ANIADIDO EN self._refs
+        for baliabidea in baliabideak:
+            izena_etiketa = baliabidea.find('span', class_='instancename')
+            if izena_etiketa:
+                izena = izena_etiketa.text.split(' Archivo')[0]
+                ikonoa = baliabidea.find('img')
+                if ikonoa and "pdf" in ikonoa['src']:
+                    self._refs.append({'pdf_name': izena + '.pdf', 'pdf_link': baliabidea['href']})
 
-        progress_step = float(100.0 / len(NUMERO_DE_PDF_EN_EGELA))
-
-
-                progress += progress_step
-                progress_var.set(progress)
-                progress_bar.update()
-                time.sleep(0.1)
+            progress += urratsa
+            progress_var.set(progress)
+            progress_bar.update()
+            time.sleep(0.1)
 
         popup.destroy()
         return self._refs
 
     def get_pdf(self, selection):
+        pdf_esteka = self._refs[selection]['pdf_link']
+        pdf_izena = self._refs[selection]['pdf_name']
+        baliabide_orria = requests.get(pdf_esteka, cookies=self._cookie)
+        baliabide_azterketa = BeautifulSoup(baliabide_orria.content, "html.parser")
+        fitxategi_esteka = baliabide_azterketa.find('object', {'id': 'resourceobject'})['data']
+        pdf_edukia = requests.get(fitxategi_esteka, cookies=self._cookie).content
 
-        print("\t##### descargando  PDF... #####")
-        #############################################
-        # RELLENAR CON CODIGO DE LA PETICION HTTP
-        # Y PROCESAMIENTO DE LA RESPUESTA HTTP
-        #############################################
-
-        return pdf_name, pdf_content
+        return pdf_izena, pdf_edukia
