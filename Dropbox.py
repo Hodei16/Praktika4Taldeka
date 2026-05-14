@@ -26,24 +26,20 @@ class Dropbox:
         server_socket = socket(AF_INET, SOCK_STREAM)
         server_socket.bind((server_addr, server_port))
         server_socket.listen(1)
-        print("\tLocal server listening on port " + str(server_port))
 
         client_connection, client_address = server_socket.accept()
         peticion = client_connection.recv(1024)
-        print("\tRequest from the browser received at local server:")
-        print(peticion)
 
         primera_linea = peticion.decode('UTF8').split('\n')[0]
         aux_auth_code = primera_linea.split(' ')[1]
         auth_code = aux_auth_code[7:].split('&')[0]
-        print("\tauth_code: " + auth_code)
 
         http_response = "HTTP/1.1 200 OK\r\n\r\n" \
                         "<html>" \
                         "<head><title>Proba</title></head>" \
                         "<body>The authentication flow has completed. Close this window.</body>" \
                         "</html>"
-        client_connection.sendall(http_response)
+        client_connection.sendall(http_response.encode('utf-8'))
         client_connection.close()
         server_socket.close()
 
